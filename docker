@@ -1,0 +1,38 @@
+services:
+  rag-agent:
+    image: project-rag-agent:latest
+    container_name: rag_enterprise
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - LLM_MODEL=llama3.2
+      - EMBED_MODEL=nomic-embed-text
+      - CHROMA_PATH=/app/data/chroma_db
+      - DUCKDB_PATH=/app/data/tabular.duckdb
+      - SQLITE_PATH=/app/data/memory.db
+      - LOG_LEVEL=INFO
+      - RERANKER_DEVICE=cpu
+      - OCR_USE_GPU=false
+      - ORG_NAME=Enterprise Organization
+
+    volumes:
+      - rag_data:/app/data
+      - rag_logs:/app/logs
+
+    restart: unless-stopped
+
+    init: true
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  rag_data:
+  rag_logs:
