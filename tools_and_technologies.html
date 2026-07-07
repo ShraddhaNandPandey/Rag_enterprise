@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RAG Agent — Tools & Technologies by Step</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.1/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --line:#2a3644; --text:#e6edf3;
+    --muted:#93a2b3; --accent:#4f9dff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:20px 14px 60px;
+  }
+  h1{font-size:1.15rem; margin:0 0 4px}
+  .sub{color:var(--muted); font-size:.85rem; margin-bottom:18px}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px; margin-bottom:16px; overflow-x:auto;
+  }
+  .card h2{font-size:.95rem; margin:0 0 10px; color:var(--accent)}
+  .mermaid{min-width:640px}
+  .step{border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:10px}
+  .step .num{display:inline-block; background:var(--accent); color:#04101f; font-weight:700; font-size:.72rem; border-radius:20px; padding:2px 9px; margin-right:8px}
+  .step h3{margin:0 0 8px; font-size:.92rem; display:inline}
+  .tech{font-size:.85rem; margin:6px 0 2px}
+  .tech b{color:#ffd479}
+  .why{font-size:.82rem; color:var(--muted); margin:0 0 8px 2px}
+</style>
+</head>
+<body>
+
+<h1>Tools & Technologies — Step by Step</h1>
+<div class="sub">What runs at each stage, and why that tool was picked</div>
+
+<div class="card">
+  <h2>Overview</h2>
+  <div class="mermaid">
+flowchart TB
+    A["📄 You upload a file"] --> B["🔍 Understand the file<br/>(read text, or read images/scans)"]
+    B --> C{"What kind of content?"}
+    C -->|Written documents| D["🧠 Store as searchable knowledge<br/>(ChromaDB)"]
+    C -->|Spreadsheets / numbers| E["🧮 Store as an exact database<br/>(DuckDB)"]
+    D --> F["❓ You ask a question"]
+    E --> F
+    F --> G{"Is this a document<br/>question or a<br/>number question?"}
+    G -->|Document| H["🔎 Search the knowledge base<br/>(ChromaDB + BM25 + reranker)"]
+    G -->|Numbers| I["🧮 Run an exact calculation<br/>(DuckDB SQL)"]
+    H --> J["🤖 Local AI writes the answer<br/>(Ollama + Llama model)"]
+    I --> J
+    J --> K["💬 You get your answer<br/>+ optional: read aloud, PDF, chart"]
+  </div>
+</div>
+
+<div class="card">
+  <h2>Step-by-step: what's used and why</h2>
+
+  <div class="step">
+    <span class="num">1</span><h3>Reading uploaded files</h3>
+    <div class="tech">Tools: <b>pypdf</b>, <b>python-docx</b>, <b>python-pptx</b></div>
+    <div class="why">Why: each file type (PDF, Word, PowerPoint) is a different format under the hood, so a dedicated reader is used for each one to pull the text out cleanly.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">2</span><h3>Reading scanned pages and photos</h3>
+    <div class="tech">Tools: <b>EasyOCR</b> (main), <b>Tesseract</b> (backup)</div>
+    <div class="why">Why: a scanned page or photo has no real "text" in it — it's just an image. OCR looks at the picture and figures out what the words say. Two engines are used so that if one struggles with a tricky image, the other can still get the job done.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">3</span><h3>Breaking text into bite-sized pieces</h3>
+    <div class="tech">Tool: custom chunker (uses <b>tiktoken</b> when available)</div>
+    <div class="why">Why: the AI can only "think about" a limited amount of text at once, so long documents are split into overlapping pieces small enough to search and reason about accurately.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">4</span><h3>Turning text into something searchable by meaning</h3>
+    <div class="tech">Tool: <b>Ollama</b> running the <b>nomic-embed-text</b> model</div>
+    <div class="why">Why: this converts each chunk of text into a kind of "meaning fingerprint," so later the app can find passages that match the idea behind your question — not just matching words.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">5</span><h3>Storing document knowledge</h3>
+    <div class="tech">Tool: <b>ChromaDB</b></div>
+    <div class="why">Why: it's a database built specifically to store those "meaning fingerprints" and quickly find the closest matches to a new question.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">6</span><h3>Storing spreadsheets and numbers</h3>
+    <div class="tech">Tool: <b>DuckDB</b> (loaded via <b>pandas</b>)</div>
+    <div class="why">Why: numbers need to be added up exactly, not guessed at by an AI. DuckDB is a real database that can calculate totals, averages, and counts with total accuracy.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">7</span><h3>Figuring out what kind of question you're asking</h3>
+    <div class="tech">Tool: custom rule-based router + <b>Ollama</b> as a fallback judge</div>
+    <div class="why">Why: a document question and a "what's the total sales" question need completely different handling. Simple word patterns catch most cases instantly; the AI only gets asked to decide when it's genuinely unclear, which keeps things fast.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">8</span><h3>Finding the right passages (document questions)</h3>
+    <div class="tech">Tools: <b>ChromaDB</b> (meaning search) + <b>BM25</b> (keyword search), combined, then a <b>CrossEncoder</b> re-ranker</div>
+    <div class="why">Why: meaning-based search alone can miss exact terms (like product codes or names), and keyword search alone can miss paraphrased ideas. Using both and then double-checking the top results with a more careful re-ranker gives more reliable answers.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">9</span><h3>Answering number questions</h3>
+    <div class="tech">Tool: AI-generated <b>SQL</b>, checked, then run in <b>DuckDB</b></div>
+    <div class="why">Why: the AI writes the calculation as a real database query instead of doing the math "in its head," so the answer is guaranteed correct. The query is also checked to make sure it can only read data, never change or delete it.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">10</span><h3>Writing the final answer</h3>
+    <div class="tech">Tool: <b>Ollama</b> running <b>Llama 3.2</b> (all running on your own machine)</div>
+    <div class="why">Why: this is the only part that "writes like a person" — everything before it just gathered the right facts. Running it locally means nothing ever has to leave your network.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">11</span><h3>Remembering the conversation</h3>
+    <div class="tech">Tool: <b>SQLite</b></div>
+    <div class="why">Why: a lightweight, reliable way to store your chat history per session, so follow-up questions like "what about him?" still make sense.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">12</span><h3>Reading answers aloud</h3>
+    <div class="tech">Tool: <b>Piper</b> (natural-sounding voice), falls back to <b>pyttsx3</b></div>
+    <div class="why">Why: Piper sounds more natural but needs a voice file installed; pyttsx3 is a built-in backup so the feature always works even before that's set up.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">13</span><h3>Exporting an answer as a PDF</h3>
+    <div class="tech">Tools: server-side PDF builder + <b>jsPDF</b> in the browser</div>
+    <div class="why">Why: lets you save or share a clean, formatted copy of an answer without needing an internet connection or third-party service.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">14</span><h3>Showing charts for number questions</h3>
+    <div class="tech">Tool: <b>ECharts</b></div>
+    <div class="why">Why: some answers (totals by department, trends over time) are easier to understand as a picture than as a sentence.</div>
+  </div>
+
+  <div class="step">
+    <span class="num">15</span><h3>Running the whole app</h3>
+    <div class="tech">Tools: <b>FastAPI</b> (the engine that serves everything), <b>Docker</b> (optional, for easy setup)</div>
+    <div class="why">Why: FastAPI is what actually listens for your requests and routes them to the right piece above. Docker just makes it easy to package the whole thing (app + AI model) to run on any machine without a complicated manual setup.</div>
+  </div>
+
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', securityLevel: 'loose', flowchart: { curve: 'basis', htmlLabels: true } });
+</script>
+</body>
+</html>
